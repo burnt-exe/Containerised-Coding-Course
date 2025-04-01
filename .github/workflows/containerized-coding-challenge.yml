@@ -13,12 +13,10 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
-    - name: Install Docker
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y docker.io
+    - name: Set up Docker
+      uses: docker/setup-buildx-action@v2
 
     - name: Pull Nginx image
       run: docker pull nginx
@@ -43,7 +41,7 @@ jobs:
         git config --local user.name "GitHub Action"
         git add README.md
         git commit -m "Update README for Stage 2"
-        git push origin main
+        git push
 
   stage-2:
     name: Stage 2 - Building Docker Images
@@ -52,7 +50,16 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
+
+    - name: Set up Docker
+      uses: docker/setup-buildx-action@v2
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
 
     - name: Write Dockerfile
       run: |
@@ -65,16 +72,10 @@ jobs:
     - name: Run Docker container
       run: docker run hello-world
 
-    - name: Login to Docker Hub
-      env:
-        DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-        DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-      run: echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
-
     - name: Tag and push Docker image
       run: |
-        docker tag hello-world $DOCKER_USERNAME/hello-world
-        docker push $DOCKER_USERNAME/hello-world
+        docker tag hello-world ${{ secrets.DOCKER_USERNAME }}/hello-world
+        docker push ${{ secrets.DOCKER_USERNAME }}/hello-world
 
     - name: Update README for Stage 3
       run: |
@@ -84,7 +85,7 @@ jobs:
         git config --local user.name "GitHub Action"
         git add README.md
         git commit -m "Update README for Stage 3"
-        git push origin main
+        git push
 
   stage-3:
     name: Stage 3 - Docker Compose
@@ -93,7 +94,15 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
+
+    - name: Set up Docker
+      uses: docker/setup-buildx-action@v2
+
+    - name: Install Docker Compose
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y docker-compose
 
     - name: Write docker-compose.yml
       run: |
@@ -110,6 +119,9 @@ jobs:
     - name: List running containers
       run: docker ps
 
+    - name: Stop Docker Compose
+      run: docker-compose down
+
     - name: Update README for Stage 4
       run: |
         echo "# Containerized Coding Challenge" > README.md
@@ -118,7 +130,7 @@ jobs:
         git config --local user.name "GitHub Action"
         git add README.md
         git commit -m "Update README for Stage 4"
-        git push origin main
+        git push
 
   stage-4:
     name: Stage 4 - Creating a Web Application
@@ -127,7 +139,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Set up project directory structure
       run: |
@@ -184,16 +196,27 @@ jobs:
   "dependencies": {
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
-    "react-scripts": "4.0.0"
+    "react-scripts": "5.0.1"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
   }
 }' > web-drive/frontend/package.json
 
-        echo 'FROM node:14-slim' > web-drive/frontend/Dockerfile
+        echo 'FROM node:16-slim' > web-drive/frontend/Dockerfile
         echo 'WORKDIR /app' >> web-drive/frontend/Dockerfile
         echo 'COPY package*.json ./' >> web-drive/frontend/Dockerfile
         echo 'RUN npm install' >> web-drive/frontend/Dockerfile
         echo 'COPY . .' >> web-drive/frontend/Dockerfile
-        echo 'RUN npm run build' >> web-drive/frontend/Dockerfile
         echo 'EXPOSE 3000' >> web-drive/frontend/Dockerfile
         echo 'CMD ["npm", "start"]' >> web-drive/frontend/Dockerfile
 
@@ -206,9 +229,19 @@ jobs:
 </head>
 <body>
     <div id="root"></div>
-    <script src="/src/App.js"></script>
 </body>
 </html>' > web-drive/frontend/public/index.html
+
+        echo 'import React from "react";
+import ReactDOM from "react-dom/client";
+import App from "./App";
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);' > web-drive/frontend/src/index.js
 
         echo 'import React, { useState } from "react";
 
@@ -223,6 +256,8 @@ function App() {
     };
 
     const uploadFile = async () => {
+        if (!selectedFile) return;
+        
         const formData = new FormData();
         formData.append("file", selectedFile);
 
@@ -257,21 +292,23 @@ export default App;' > web-drive/frontend/src/App.js
 
 services:
   backend:
-    build: ./backend
+    build: ./web-drive/backend
     volumes:
       - data:/data
     ports:
       - "5000:5000"
 
   frontend:
-    build: ./frontend
+    build: ./web-drive/frontend
     ports:
       - "3000:3000"
+    depends_on:
+      - backend
     environment:
-      - REACT_APP_API_URL=http://backend:5000
+      - REACT_APP_API_URL=http://localhost:5000
 
 volumes:
-  data:' > web-drive/docker-compose.yml
+  data:' > docker-compose.yml
 
     - name: Update README for Stage 5
       run: |
@@ -279,9 +316,9 @@ volumes:
         echo "## Current Stage: 5 - Persistent Data" >> README.md
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git add README.md
+        git add README.md web-drive docker-compose.yml
         git commit -m "Update README for Stage 5"
-        git push origin main
+        git push
 
   stage-5:
     name: Stage 5 - Persistent Data
@@ -290,7 +327,15 @@ volumes:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
+
+    - name: Set up Docker
+      uses: docker/setup-buildx-action@v2
+
+    - name: Install Docker Compose
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y docker-compose
 
     - name: Run Docker Compose with volume
       run: docker-compose up -d
@@ -298,11 +343,18 @@ volumes:
     - name: Verify data persistence
       run: |
         echo "Test data" > test.txt
-        docker cp test.txt $(docker-compose ps -q backend):/data/test.txt
+        docker cp test.txt $(docker ps -q --filter name=backend):/data/test.txt
         docker-compose down
         docker-compose up -d
-        docker cp $(docker-compose ps -q backend):/data/test.txt test.txt
-        if [ "$(cat test.txt)" != "Test data" ]; then exit 1; fi
+        docker cp $(docker ps -q --filter name=backend):/data/test.txt retrieved_test.txt
+        cat retrieved_test.txt
+        if ! grep -q "Test data" retrieved_test.txt; then
+          echo "Data persistence verification failed"
+          exit 1
+        fi
+
+    - name: Stop Docker Compose
+      run: docker-compose down
 
     - name: Update README for Stage 6
       run: |
@@ -312,7 +364,7 @@ volumes:
         git config --local user.name "GitHub Action"
         git add README.md
         git commit -m "Update README for Stage 6"
-        git push origin main
+        git push
 
   stage-6:
     name: Stage 6 - CI/CD with GitHub Actions
@@ -321,31 +373,77 @@ volumes:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
+
+    - name: Set up Docker
+      uses: docker/setup-buildx-action@v2
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
 
     - name: Build and push backend Docker image
-      run: |
-        cd web-drive/backend
-        docker build -t ${{ secrets.DOCKER_USERNAME }}/web-drive-backend .
-        echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
-        docker push ${{ secrets.DOCKER_USERNAME }}/web-drive-backend
+      uses: docker/build-push-action@v4
+      with:
+        context: ./web-drive/backend
+        push: true
+        tags: ${{ secrets.DOCKER_USERNAME }}/web-drive-backend:latest
 
     - name: Build and push frontend Docker image
+      uses: docker/build-push-action@v4
+      with:
+        context: ./web-drive/frontend
+        push: true
+        tags: ${{ secrets.DOCKER_USERNAME }}/web-drive-frontend:latest
+
+    - name: Install Docker Compose
       run: |
-        cd web-drive/frontend
-        docker build -t ${{ secrets.DOCKER_USERNAME }}/web-drive-frontend .
-        echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
-        docker push ${{ secrets.DOCKER_USERNAME }}/web-drive-frontend
+        sudo apt-get update
+        sudo apt-get install -y docker-compose
 
     - name: Deploy application
-      run: docker-compose up -d
+      run: |
+        echo 'version: "3"
+
+services:
+  backend:
+    image: ${{ secrets.DOCKER_USERNAME }}/web-drive-backend:latest
+    volumes:
+      - data:/data
+    ports:
+      - "5000:5000"
+
+  frontend:
+    image: ${{ secrets.DOCKER_USERNAME }}/web-drive-frontend:latest
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    environment:
+      - REACT_APP_API_URL=http://localhost:5000
+
+volumes:
+  data:' > production-compose.yml
+        docker-compose -f production-compose.yml up -d
 
     - name: Update README for Completion
       run: |
         echo "# Containerized Coding Challenge" > README.md
         echo "## Current Stage: Completed" >> README.md
+        echo "" >> README.md
+        echo "This challenge demonstrates Docker container usage from basic concepts to deployment." >> README.md
+        echo "" >> README.md
+        echo "### What was learned:" >> README.md
+        echo "- Docker basics (pull, run, stop)" >> README.md
+        echo "- Building custom Docker images" >> README.md
+        echo "- Using Docker Compose for multi-container applications" >> README.md
+        echo "- Developing a containerized web application" >> README.md
+        echo "- Implementing data persistence with Docker volumes" >> README.md
+        echo "- Setting up CI/CD with GitHub Actions" >> README.md
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git add README.md
-        git commit -m "Update README for Completion"
-        git push origin main
+        git add README.md production-compose.yml
+        git commit -m "Complete Containerized Coding Challenge"
+        git push
